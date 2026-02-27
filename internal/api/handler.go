@@ -11,12 +11,12 @@ import (
 
 // Handler holds the HTTP handlers for the SMS gateway API.
 type Handler struct {
-	modem *modem.Modem
+	modem modem.Modem
 	queue *queue.Queue
 }
 
 // NewHandler creates a new API handler with the given modem and queue instances.
-func NewHandler(m *modem.Modem, q *queue.Queue) *Handler {
+func NewHandler(m modem.Modem, q *queue.Queue) *Handler {
 	return &Handler{modem: m, queue: q}
 }
 

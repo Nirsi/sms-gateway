@@ -14,11 +14,18 @@ func main() {
 	cfg := config.Load()
 
 	log.Printf("SMS Gateway starting")
-	log.Printf("  Serial port : %s @ %d baud", cfg.PortName, cfg.BaudRate)
 	log.Printf("  Listen addr : %s", cfg.ListenAddr)
 	log.Printf("  Queue size  : %d", cfg.QueueSize)
 
-	m := modem.New(cfg.PortName, cfg.BaudRate)
+	var m modem.Modem
+	if cfg.Simulator {
+		log.Printf("  Mode        : SIMULATOR (no real modem)")
+		m = modem.NewSimulator()
+	} else {
+		log.Printf("  Serial port : %s @ %d baud", cfg.PortName, cfg.BaudRate)
+		m = modem.New(cfg.PortName, cfg.BaudRate)
+	}
+
 	q := queue.New(m, cfg.QueueSize)
 
 	handler := api.NewHandler(m, q)

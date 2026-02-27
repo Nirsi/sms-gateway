@@ -28,23 +28,29 @@ type SendResult struct {
 	Error            string `json:"error,omitempty"`
 }
 
-// Modem manages serial port communication with the GSM modem.
-type Modem struct {
+// Modem defines the interface for modem operations.
+type Modem interface {
+	GetStatus() (*Status, error)
+	SendSMS(phoneNumber, message string) (*SendResult, error)
+}
+
+// GSMModem manages serial port communication with a real GSM modem.
+type GSMModem struct {
 	portName string
 	baudRate int
 	mu       sync.Mutex
 }
 
-// New creates a new Modem instance.
-func New(portName string, baudRate int) *Modem {
-	return &Modem{
+// New creates a new GSMModem instance.
+func New(portName string, baudRate int) *GSMModem {
+	return &GSMModem{
 		portName: portName,
 		baudRate: baudRate,
 	}
 }
 
 // openPort opens the serial port with the configured settings.
-func (m *Modem) openPort() (serial.Port, error) {
+func (m *GSMModem) openPort() (serial.Port, error) {
 	mode := &serial.Mode{
 		BaudRate: m.baudRate,
 		DataBits: 8,
@@ -68,7 +74,7 @@ func (m *Modem) openPort() (serial.Port, error) {
 
 // readUntil reads from the port in a polling loop until the accumulated
 // response contains one of the terminal markers or the deadline is reached.
-func (m *Modem) readUntil(port serial.Port, markers []string, deadline time.Duration) string {
+func (m *GSMModem) readUntil(port serial.Port, markers []string, deadline time.Duration) string {
 	buf := make([]byte, 4096)
 	var response strings.Builder
 	cutoff := time.Now().Add(deadline)
@@ -90,7 +96,7 @@ func (m *Modem) readUntil(port serial.Port, markers []string, deadline time.Dura
 }
 
 // sendAT sends an AT command and waits for a complete response (OK or ERROR).
-func (m *Modem) sendAT(port serial.Port, cmd string) (string, error) {
+func (m *GSMModem) sendAT(port serial.Port, cmd string) (string, error) {
 	_, err := port.Write([]byte(cmd + "\r"))
 	if err != nil {
 		return "", fmt.Errorf("failed to write command %q: %w", cmd, err)
@@ -104,7 +110,7 @@ func (m *Modem) sendAT(port serial.Port, cmd string) (string, error) {
 }
 
 // GetStatus checks the modem status including connectivity, network registration, and signal.
-func (m *Modem) GetStatus() (*Status, error) {
+func (m *GSMModem) GetStatus() (*Status, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -175,7 +181,7 @@ func (m *Modem) GetStatus() (*Status, error) {
 }
 
 // SendSMS sends an SMS message to the specified phone number.
-func (m *Modem) SendSMS(phoneNumber, message string) (*SendResult, error) {
+func (m *GSMModem) SendSMS(phoneNumber, message string) (*SendResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

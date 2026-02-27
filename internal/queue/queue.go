@@ -43,12 +43,12 @@ type Queue struct {
 	jobs  chan *Job
 	store map[string]*Job
 	mu    sync.RWMutex
-	modem *modem.Modem
+	modem modem.Modem
 }
 
 // New creates a new Queue and starts the background worker and cleanup goroutine.
 // bufferSize controls how many jobs can be waiting before Enqueue rejects new ones.
-func New(m *modem.Modem, bufferSize int) *Queue {
+func New(m modem.Modem, bufferSize int) *Queue {
 	q := &Queue{
 		jobs:  make(chan *Job, bufferSize),
 		store: make(map[string]*Job),
