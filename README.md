@@ -41,6 +41,7 @@ sms-gateway.exe [flags]
 | `-baud`        | `115200` | Serial port baud rate                                 |
 | `-listen`      | `:8080`  | HTTP listen address (e.g. `:8080`, `127.0.0.1:9000`) |
 | `-queue-size`  | `100`    | Maximum number of SMS jobs waiting in the queue       |
+| `-simulator`   | `false`  | Run in simulator mode without a real modem            |
 
 ### Examples
 
@@ -53,6 +54,9 @@ sms-gateway.exe -port COM5 -listen 127.0.0.1:9000
 
 # Larger queue for high-traffic use
 sms-gateway.exe -queue-size 500
+
+# Run in simulator mode (no real modem required)
+sms-gateway.exe -simulator
 ```
 
 ## API
