@@ -21,10 +21,20 @@ func NewHandler(m modem.Modem, q *queue.Queue) *Handler {
 }
 
 // RegisterRoutes registers all API routes on the provided mux.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/status", h.handleStatus)
-	mux.HandleFunc("POST /api/send", h.handleSendSMS)
-	mux.HandleFunc("GET /api/queue/{id}", h.handleJobStatus)
+// If wrap is non-nil, each handler is wrapped with the provided middleware
+// (e.g. API key authentication).
+func (h *Handler) RegisterRoutes(mux *http.ServeMux, wrap func(http.Handler) http.Handler) {
+	register := func(pattern string, handler http.HandlerFunc) {
+		if wrap != nil {
+			mux.Handle(pattern, wrap(handler))
+		} else {
+			mux.HandleFunc(pattern, handler)
+		}
+	}
+
+	register("GET /api/status", h.handleStatus)
+	register("POST /api/send", h.handleSendSMS)
+	register("GET /api/queue/{id}", h.handleJobStatus)
 }
 
 // apiError is a standard error response.

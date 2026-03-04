@@ -1,0 +1,30 @@
+{{define "partial_history.html"}}
+{{if .History}}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Phone</th>
+            <th>Message</th>
+            <th>Status</th>
+            <th>Error</th>
+            <th>Completed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .History}}
+        <tr>
+            <td><code>{{.ID}}</code></td>
+            <td>{{.Phone}}</td>
+            <td>{{.Message}}</td>
+            <td><span class="badge {{statusClass (printf "%s" .Status)}}">{{.Status}}</span></td>
+            <td>{{if .Error}}{{.Error}}{{else}}-{{end}}</td>
+            <td>{{formatTime .UpdatedAt}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p><em>No completed messages yet.</em></p>
+{{end}}
+{{end}}

@@ -1,0 +1,54 @@
+{{define "partial_keylist.html"}}
+{{if .NewKey}}
+<div class="new-key-display">
+    <strong>New API key created! Copy it now — it is also stored in your keys file.</strong><br>
+    <code>{{.NewKey}}</code>
+</div>
+{{end}}
+
+{{if .Keys}}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Key</th>
+            <th>Created</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Keys}}
+        <tr{{if .Revoked}} class="revoked"{{end}}>
+            <td>{{.Name}}</td>
+            <td><code>{{maskKey .Key}}</code></td>
+            <td>{{formatTime .CreatedAt}}</td>
+            <td>
+                {{if .Revoked}}
+                    <span class="badge status-failed">Revoked</span>
+                {{else}}
+                    <span class="badge status-sent">Active</span>
+                {{end}}
+            </td>
+            <td>
+                {{if not .Revoked}}
+                <form style="margin:0; display:inline"
+                      hx-post="/dashboard/keys/revoke"
+                      hx-target="#keylist-panel"
+                      hx-swap="innerHTML"
+                      hx-confirm="Revoke this API key? This cannot be undone.">
+                    <input type="hidden" name="id" value="{{.ID}}">
+                    <button type="submit" class="outline secondary" style="margin:0; padding:0.2em 0.6em; font-size:0.85em;">Revoke</button>
+                </form>
+                {{else}}
+                -
+                {{end}}
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p><em>No API keys created yet.</em></p>
+{{end}}
+{{end}}

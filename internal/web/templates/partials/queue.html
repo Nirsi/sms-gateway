@@ -1,0 +1,29 @@
+{{define "partial_queue.html"}}
+<p><small>{{.Pending}} job(s) waiting in queue</small></p>
+{{if .Queue}}
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Phone</th>
+            <th>Message</th>
+            <th>Status</th>
+            <th>Created</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Queue}}
+        <tr>
+            <td><code>{{.ID}}</code></td>
+            <td>{{.Phone}}</td>
+            <td>{{.Message}}</td>
+            <td><span class="badge {{statusClass (printf "%s" .Status)}}">{{.Status}}</span></td>
+            <td>{{formatTime .CreatedAt}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p><em>No active jobs in queue.</em></p>
+{{end}}
+{{end}}

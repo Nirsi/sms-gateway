@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
@@ -19,9 +20,6 @@ const (
 	StatusSent    JobStatus = "sent"
 	StatusFailed  JobStatus = "failed"
 )
-
-// How long completed jobs are kept in the store before cleanup removes them.
-const jobRetention = 5 * time.Minute
 
 // How often the cleanup goroutine runs.
 const cleanupInterval = 1 * time.Minute
@@ -40,19 +38,26 @@ type Job struct {
 
 // Queue manages an in-memory SMS job queue with a single background worker.
 type Queue struct {
-	jobs  chan *Job
-	store map[string]*Job
-	mu    sync.RWMutex
-	modem modem.Modem
+	jobs        chan *Job
+	store       map[string]*Job
+	mu          sync.RWMutex
+	modem       modem.Modem
+	historySize int
 }
 
 // New creates a new Queue and starts the background worker and cleanup goroutine.
 // bufferSize controls how many jobs can be waiting before Enqueue rejects new ones.
-func New(m modem.Modem, bufferSize int) *Queue {
+// historySize controls how many completed jobs are kept in memory.
+func New(m modem.Modem, bufferSize, historySize int) *Queue {
+	if historySize < 0 {
+		historySize = 0
+	}
+
 	q := &Queue{
-		jobs:  make(chan *Job, bufferSize),
-		store: make(map[string]*Job),
-		modem: m,
+		jobs:        make(chan *Job, bufferSize),
+		store:       make(map[string]*Job),
+		modem:       m,
+		historySize: historySize,
 	}
 
 	go q.worker()
@@ -91,34 +96,72 @@ func (q *Queue) Enqueue(phone, message string) (*Job, bool) {
 }
 
 // Get returns a job by its ID, or nil if not found.
-// Completed jobs (sent or failed) are removed from the store after reading.
 func (q *Queue) Get(id string) *Job {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 
 	job, ok := q.store[id]
 	if !ok {
 		return nil
 	}
 
-	// Return a copy so the caller can't mutate the stored job.
-	cp := *job
-	if job.Result != nil {
-		resultCopy := *job.Result
-		cp.Result = &resultCopy
+	return q.copyJob(job)
+}
+
+// List returns a copy of all jobs, sorted by creation time (newest first).
+func (q *Queue) List() []*Job {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	jobs := make([]*Job, 0, len(q.store))
+	for _, job := range q.store {
+		jobs = append(jobs, q.copyJob(job))
 	}
 
-	// Clean up completed jobs once their status has been read.
-	if job.Status == StatusSent || job.Status == StatusFailed {
-		delete(q.store, id)
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+	})
+
+	return jobs
+}
+
+// ListByStatus returns a copy of jobs filtered by status, sorted newest first.
+func (q *Queue) ListByStatus(statuses ...JobStatus) []*Job {
+	statusSet := make(map[JobStatus]bool, len(statuses))
+	for _, s := range statuses {
+		statusSet[s] = true
 	}
 
-	return &cp
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
+	var jobs []*Job
+	for _, job := range q.store {
+		if statusSet[job.Status] {
+			jobs = append(jobs, q.copyJob(job))
+		}
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].CreatedAt.After(jobs[j].CreatedAt)
+	})
+
+	return jobs
 }
 
 // Pending returns the number of jobs waiting in the queue.
 func (q *Queue) Pending() int {
 	return len(q.jobs)
+}
+
+// copyJob returns a deep copy of a job so callers cannot mutate store data.
+func (q *Queue) copyJob(job *Job) *Job {
+	cp := *job
+	if job.Result != nil {
+		resultCopy := *job.Result
+		cp.Result = &resultCopy
+	}
+	return &cp
 }
 
 // worker processes jobs from the channel one at a time.
@@ -155,28 +198,45 @@ func (q *Queue) process(job *Job) {
 	}
 }
 
-// cleanup periodically removes completed jobs that are older than the retention period.
+// cleanup periodically trims completed jobs when the count exceeds historySize.
 func (q *Queue) cleanup() {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		cutoff := time.Now().Add(-jobRetention)
-		removed := 0
+		q.trimHistory()
+	}
+}
 
-		q.mu.Lock()
-		for id, job := range q.store {
-			if (job.Status == StatusSent || job.Status == StatusFailed) && job.UpdatedAt.Before(cutoff) {
-				delete(q.store, id)
-				removed++
-			}
-		}
-		q.mu.Unlock()
+// trimHistory removes the oldest completed jobs if we exceed historySize.
+func (q *Queue) trimHistory() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 
-		if removed > 0 {
-			log.Printf("queue cleanup: removed %d completed job(s)", removed)
+	// Collect completed jobs.
+	var completed []*Job
+	for _, job := range q.store {
+		if job.Status == StatusSent || job.Status == StatusFailed {
+			completed = append(completed, job)
 		}
 	}
+
+	if len(completed) <= q.historySize {
+		return
+	}
+
+	// Sort oldest first.
+	sort.Slice(completed, func(i, j int) bool {
+		return completed[i].UpdatedAt.Before(completed[j].UpdatedAt)
+	})
+
+	// Remove the oldest entries beyond the limit.
+	excess := len(completed) - q.historySize
+	for i := 0; i < excess; i++ {
+		delete(q.store, completed[i].ID)
+	}
+
+	log.Printf("queue cleanup: trimmed %d completed job(s) (history limit: %d)", excess, q.historySize)
 }
 
 // generateID returns a random 8-byte hex string.

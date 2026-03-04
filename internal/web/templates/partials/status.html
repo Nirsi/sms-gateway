@@ -1,0 +1,29 @@
+{{define "partial_status.html"}}
+{{if .StatusErr}}
+<div class="notice error" role="alert">{{.StatusErr}}</div>
+{{end}}
+{{with .Status}}
+<div class="status-grid">
+    <div class="status-card">
+        <div class="label">Connected</div>
+        <div class="value">{{if .Connected}}Yes{{else}}No{{end}}</div>
+    </div>
+    <div class="status-card">
+        <div class="label">Network</div>
+        <div class="value">{{if .NetworkRegistered}}Registered{{else}}Not registered{{end}}</div>
+    </div>
+    <div class="status-card">
+        <div class="label">Signal</div>
+        <div class="value">{{.SignalStrength}} ({{.SignalStrengthDesc}})</div>
+    </div>
+    {{if .Manufacturer}}
+    <div class="status-card">
+        <div class="label">Modem</div>
+        <div class="value">{{.Manufacturer}} {{.Model}}</div>
+    </div>
+    {{end}}
+</div>
+{{else}}
+<p>No modem status available.</p>
+{{end}}
+{{end}}

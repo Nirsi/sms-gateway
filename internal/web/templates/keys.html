@@ -1,0 +1,54 @@
+{{define "keys.html"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>API Keys - SMS Gateway</title>
+    <link rel="stylesheet" href="/static/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <nav class="container">
+        <ul>
+            <li><strong>SMS Gateway</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/dashboard/keys" aria-current="page">API Keys</a></li>
+            <li>
+                <form method="POST" action="/logout" style="margin:0">
+                    <button type="submit" class="outline secondary" style="margin:0; padding: 0.3em 0.8em;">Logout</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <h3>API Key Management</h3>
+        <p>API keys are used to authenticate requests to the <code>/api/*</code> endpoints.
+           Include the key in the <code>X-API-Key</code> header or as <code>Authorization: Bearer &lt;key&gt;</code>.</p>
+
+        <!-- Create new key -->
+        <section>
+            <h4>Create New Key</h4>
+            <form hx-post="/dashboard/keys"
+                  hx-target="#keylist-panel"
+                  hx-swap="innerHTML"
+                  class="grid" style="grid-template-columns: 1fr auto;">
+                <input type="text" name="name" placeholder="Key name (e.g. My integration)">
+                <button type="submit" style="white-space: nowrap; width: auto;">Create Key</button>
+            </form>
+        </section>
+
+        <!-- Key list -->
+        <section>
+            <div id="keylist-panel">
+                {{template "partial_keylist.html" .}}
+            </div>
+        </section>
+    </main>
+</body>
+</html>
+{{end}}

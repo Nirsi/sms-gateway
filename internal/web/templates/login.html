@@ -1,0 +1,30 @@
+{{define "login.html"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login - SMS Gateway</title>
+    <link rel="stylesheet" href="/static/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="container">
+        <article style="max-width: 400px; margin: 10vh auto;">
+            <header>
+                <h2>SMS Gateway</h2>
+                <p>Enter your admin password to continue.</p>
+            </header>
+            {{if .Error}}
+            <div class="notice error" role="alert">{{.Error}}</div>
+            {{end}}
+            <form method="POST" action="/login">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="Admin password" required autofocus>
+                <button type="submit">Log in</button>
+            </form>
+        </article>
+    </main>
+</body>
+</html>
+{{end}}

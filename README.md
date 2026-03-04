@@ -35,13 +35,16 @@ sms-gateway.exe [flags]
 
 ### Flags
 
-| Flag           | Default  | Description                                           |
-|----------------|----------|-------------------------------------------------------|
-| `-port`        | `COM3`   | Serial port name (e.g. `COM3`, `/dev/ttyUSB0`)       |
-| `-baud`        | `115200` | Serial port baud rate                                 |
-| `-listen`      | `:8080`  | HTTP listen address (e.g. `:8080`, `127.0.0.1:9000`) |
-| `-queue-size`  | `100`    | Maximum number of SMS jobs waiting in the queue       |
-| `-simulator`   | `false`  | Run in simulator mode without a real modem            |
+| Flag              | Default      | Description                                                                 |
+|-------------------|--------------|-----------------------------------------------------------------------------|
+| `-port`           | `COM3`       | Serial port name (e.g. `COM3`, `/dev/ttyUSB0`)                             |
+| `-baud`           | `115200`     | Serial port baud rate                                                       |
+| `-listen`         | `:8080`      | HTTP listen address (e.g. `:8080`, `127.0.0.1:9000`)                       |
+| `-queue-size`     | `100`        | Maximum number of SMS jobs waiting in the queue                             |
+| `-history-size`   | `1000`       | Maximum number of completed SMS jobs to keep in history                     |
+| `-simulator`      | `false`      | Run in simulator mode without a real modem                                  |
+| `-admin-password` | *(generated)*| Admin dashboard password (overwrites stored value; if empty, uses stored or generates new) |
+| `-keys-file`      | `keys.json`  | Path to the API keys and admin password JSON file                           |
 
 ### Examples
 
@@ -60,6 +63,19 @@ sms-gateway.exe -simulator
 ```
 
 ## API
+
+All `/api/*` endpoints require a valid API key. Include the key in every request using one of:
+
+- **Header:** `X-API-Key: <key>`
+- **Header:** `Authorization: Bearer <key>`
+
+Requests without a valid key receive a `401 Unauthorized` response:
+
+```json
+{"error": "invalid or missing API key"}
+```
+
+API keys are managed through the admin dashboard (available at `/` after login). Keys are stored in the file specified by `-keys-file` (default `keys.json`).
 
 All responses are JSON with `Content-Type: application/json`.
 

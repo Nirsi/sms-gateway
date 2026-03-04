@@ -1,0 +1,86 @@
+{{define "dashboard.html"}}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard - SMS Gateway</title>
+    <link rel="stylesheet" href="/static/pico.min.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+    <nav class="container">
+        <ul>
+            <li><strong>SMS Gateway</strong></li>
+        </ul>
+        <ul>
+            <li><a href="/dashboard" aria-current="page">Dashboard</a></li>
+            <li><a href="/dashboard/keys">API Keys</a></li>
+            <li>
+                <form method="POST" action="/logout" style="margin:0">
+                    <button type="submit" class="outline secondary" style="margin:0; padding: 0.3em 0.8em;">Logout</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <!-- Modem Status -->
+        <section>
+            <h3>Modem Status</h3>
+            <div id="status-panel"
+                 hx-get="/dashboard/partials/status"
+                 hx-trigger="every 5s"
+                 hx-swap="innerHTML">
+                {{template "partial_status.html" .}}
+            </div>
+        </section>
+
+        <!-- Send SMS -->
+        <section>
+            <h3>Send SMS</h3>
+            <form hx-post="/dashboard/send"
+                  hx-target="#send-result"
+                  hx-swap="innerHTML"
+                  class="send-form">
+                <div class="grid">
+                    <label>
+                        Phone number
+                        <input type="tel" name="phone" placeholder="+1234567890" required>
+                    </label>
+                    <label>
+                        Message
+                        <input type="text" name="message" placeholder="Your message..." required>
+                    </label>
+                </div>
+                <button type="submit">Send SMS</button>
+            </form>
+            <div id="send-result"></div>
+        </section>
+
+        <!-- Current Queue -->
+        <section>
+            <h3>Current Queue</h3>
+            <div id="queue-panel"
+                 hx-get="/dashboard/partials/queue"
+                 hx-trigger="every 2s"
+                 hx-swap="innerHTML">
+                {{template "partial_queue.html" .}}
+            </div>
+        </section>
+
+        <!-- SMS History -->
+        <section>
+            <h3>SMS History</h3>
+            <div id="history-panel"
+                 hx-get="/dashboard/partials/history"
+                 hx-trigger="every 5s"
+                 hx-swap="innerHTML">
+                {{template "partial_history.html" .}}
+            </div>
+        </section>
+    </main>
+</body>
+</html>
+{{end}}
