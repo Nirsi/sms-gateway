@@ -104,12 +104,20 @@ nav a[aria-current="page"] {
 /* Table tweaks */
 table {
     font-size: 0.9em;
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
 }
 
 /* Send form layout */
 .send-form {
     display: grid;
     gap: 1em;
+}
+
+.send-form textarea {
+    min-height: 7rem;
+    resize: vertical;
 }
 
 /* Revoked key styling */
@@ -148,4 +156,8 @@ section {
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator {
     opacity: 1;
+}
+
+code {
+    word-break: break-all;
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 )
@@ -52,11 +53,19 @@ func (m *SimulatorModem) SendSMS(phoneNumber, message string) (*SendResult, erro
 	ref := m.msgRef
 	m.mu.Unlock()
 
-	log.Printf("[SIMULATOR] SMS to %s:", phoneNumber)
-	log.Printf("[SIMULATOR] %s", message)
+	log.Printf("[SIMULATOR] SMS to %s (%d chars)", phoneNumber, len(message))
+	log.Printf("[SIMULATOR] preview: %s", previewMessage(message))
 
 	return &SendResult{
 		Success:          true,
 		MessageReference: fmt.Sprintf("%d", ref),
 	}, nil
+}
+
+func previewMessage(message string) string {
+	const maxPreview = 80
+	if len(message) <= maxPreview {
+		return message
+	}
+	return strings.TrimSpace(message[:maxPreview]) + "..."
 }

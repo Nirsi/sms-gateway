@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/pico.min.css">
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/htmx.min.js"></script>
+    <meta name="csrf-token" content="{{.CSRFToken}}">
 </head>
 <body>
     <nav class="container">
@@ -19,6 +20,7 @@
             <li><a href="/dashboard/keys">API Keys</a></li>
             <li>
                 <form method="POST" action="/logout" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                     <button type="submit" class="outline secondary" style="margin:0; padding: 0.3em 0.8em;">Logout</button>
                 </form>
             </li>
@@ -30,8 +32,10 @@
         <section>
             <h3>Modem Status</h3>
             <div id="status-panel"
+                 aria-live="polite"
                  hx-get="/dashboard/partials/status"
                  hx-trigger="every 5s"
+                 hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'
                  hx-swap="innerHTML">
                 {{template "partial_status.html" .}}
             </div>
@@ -43,28 +47,33 @@
             <form hx-post="/dashboard/send"
                   hx-target="#send-result"
                   hx-swap="innerHTML"
+                  hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'
                   class="send-form">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                 <div class="grid">
                     <label>
                         Phone number
-                        <input type="tel" name="phone" placeholder="+1234567890" required>
+                        <input type="tel" name="phone" placeholder="+1234567890" pattern="{{.PhonePattern}}" maxlength="16" autocomplete="tel" required>
                     </label>
                     <label>
                         Message
-                        <input type="text" name="message" placeholder="Your message..." required>
+                        <textarea name="message" placeholder="Your message..." maxlength="{{.MessageMaxLength}}" rows="4" required></textarea>
                     </label>
                 </div>
+                <small>Use E.164 phone format. Maximum {{.MessageMaxLength}} characters.</small>
                 <button type="submit">Send SMS</button>
             </form>
-            <div id="send-result"></div>
+            <div id="send-result" aria-live="polite"></div>
         </section>
 
         <!-- Current Queue -->
         <section>
             <h3>Current Queue</h3>
             <div id="queue-panel"
+                 aria-live="polite"
                  hx-get="/dashboard/partials/queue"
                  hx-trigger="every 2s"
+                 hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'
                  hx-swap="innerHTML">
                 {{template "partial_queue.html" .}}
             </div>
@@ -74,8 +83,10 @@
         <section>
             <h3>SMS History</h3>
             <div id="history-panel"
+                 aria-live="polite"
                  hx-get="/dashboard/partials/history"
                  hx-trigger="every 5s"
+                 hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'
                  hx-swap="innerHTML">
                 {{template "partial_history.html" .}}
             </div>

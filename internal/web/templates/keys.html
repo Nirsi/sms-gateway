@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/static/pico.min.css">
     <link rel="stylesheet" href="/static/style.css">
     <script src="/static/htmx.min.js"></script>
+    <meta name="csrf-token" content="{{.CSRFToken}}">
 </head>
 <body>
     <nav class="container">
@@ -19,6 +20,7 @@
             <li><a href="/dashboard/keys" aria-current="page">API Keys</a></li>
             <li>
                 <form method="POST" action="/logout" style="margin:0">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                     <button type="submit" class="outline secondary" style="margin:0; padding: 0.3em 0.8em;">Logout</button>
                 </form>
             </li>
@@ -36,15 +38,20 @@
             <form hx-post="/dashboard/keys"
                   hx-target="#keylist-panel"
                   hx-swap="innerHTML"
+                  hx-headers='{"X-CSRF-Token":"{{.CSRFToken}}"}'
                   class="grid" style="grid-template-columns: 1fr auto;">
-                <input type="text" name="name" placeholder="Key name (e.g. My integration)">
+                <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+                <label>
+                    Key name
+                    <input type="text" name="name" maxlength="100" placeholder="Key name (e.g. My integration)">
+                </label>
                 <button type="submit" style="white-space: nowrap; width: auto;">Create Key</button>
             </form>
         </section>
 
         <!-- Key list -->
         <section>
-            <div id="keylist-panel">
+            <div id="keylist-panel" aria-live="polite">
                 {{template "partial_keylist.html" .}}
             </div>
         </section>

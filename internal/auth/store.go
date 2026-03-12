@@ -2,6 +2,8 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,37 +11,43 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // APIKey represents a single API key entry.
 type APIKey struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Key       string    `json:"key"`
-	CreatedAt time.Time `json:"created_at"`
-	Revoked   bool      `json:"revoked"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	KeyHash    string    `json:"key_hash,omitempty"`
+	KeyPreview string    `json:"key_preview,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	Revoked    bool      `json:"revoked"`
 }
 
 // storeData is the JSON structure persisted to disk.
 type storeData struct {
-	AdminPassword string   `json:"admin_password"`
-	APIKeys       []APIKey `json:"api_keys"`
+	AdminPasswordHash string   `json:"admin_password_hash,omitempty"`
+	APIKeys           []APIKey `json:"api_keys"`
+}
+
+type session struct {
+	Expiry time.Time
 }
 
 // Store manages admin authentication and API keys.
-// Admin password and API keys are stored in plaintext in a JSON file.
-// This is a deliberate trade-off for simplicity in a personal-use application.
-// Anyone with read access to the keys file has full access.
 type Store struct {
 	mu       sync.RWMutex
 	filePath string
 	data     storeData
-	// sessions maps session token -> expiry time (in-memory only, lost on restart).
-	sessions map[string]time.Time
+	// sessions are in-memory only and are lost on restart.
+	sessions map[string]session
 }
 
 // session lifetime for the admin dashboard.
 const sessionLifetime = 24 * time.Hour
+
+const sessionCleanupInterval = 5 * time.Minute
 
 // NewStore creates a new auth store. It loads existing data from filePath if present.
 // If adminPassword is non-empty, it overwrites the stored admin password.
@@ -47,7 +55,7 @@ const sessionLifetime = 24 * time.Hour
 func NewStore(filePath string, adminPassword string) (*Store, error) {
 	s := &Store{
 		filePath: filePath,
-		sessions: make(map[string]time.Time),
+		sessions: make(map[string]session),
 	}
 
 	// Try to load existing file.
@@ -57,19 +65,26 @@ func NewStore(filePath string, adminPassword string) (*Store, error) {
 
 	// Handle admin password.
 	if adminPassword != "" {
-		// Flag provided — overwrite whatever was stored.
-		s.data.AdminPassword = adminPassword
+		hash, err := hashAdminPassword(adminPassword)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash admin password: %w", err)
+		}
+		s.data.AdminPasswordHash = hash
 		if err := s.save(); err != nil {
 			return nil, fmt.Errorf("failed to save auth store: %w", err)
 		}
-		log.Printf("Admin password set from command-line flag")
-	} else if s.data.AdminPassword == "" {
+		log.Printf("Admin password set from configuration")
+	} else if s.data.AdminPasswordHash == "" {
 		// No flag, no stored password — generate one.
 		generated, err := generateRandomString(16)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate admin password: %w", err)
 		}
-		s.data.AdminPassword = generated
+		hash, err := hashAdminPassword(generated)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash generated admin password: %w", err)
+		}
+		s.data.AdminPasswordHash = hash
 		if err := s.save(); err != nil {
 			return nil, fmt.Errorf("failed to save auth store: %w", err)
 		}
@@ -79,14 +94,20 @@ func NewStore(filePath string, adminPassword string) (*Store, error) {
 		log.Printf("========================================")
 	}
 
+	go s.cleanupSessions()
+
 	return s, nil
 }
 
 // ValidateAdminPassword checks whether the provided password matches.
 func (s *Store) ValidateAdminPassword(password string) bool {
 	s.mu.RLock()
+	hash := s.data.AdminPasswordHash
 	defer s.mu.RUnlock()
-	return password != "" && password == s.data.AdminPassword
+	if password == "" || hash == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
 // CreateSession generates a new session token for an authenticated admin.
@@ -98,7 +119,7 @@ func (s *Store) CreateSession() (string, error) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[token] = time.Now().Add(sessionLifetime)
+	s.sessions[token] = session{Expiry: time.Now().Add(sessionLifetime)}
 	return token, nil
 }
 
@@ -111,11 +132,11 @@ func (s *Store) ValidateSession(token string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	expiry, ok := s.sessions[token]
+	session, ok := s.sessions[token]
 	if !ok {
 		return false
 	}
-	if time.Now().After(expiry) {
+	if time.Now().After(session.Expiry) {
 		delete(s.sessions, token)
 		return false
 	}
@@ -130,22 +151,24 @@ func (s *Store) DestroySession(token string) {
 }
 
 // CreateAPIKey creates a new API key with the given name and persists the store.
-func (s *Store) CreateAPIKey(name string) (*APIKey, error) {
+func (s *Store) CreateAPIKey(name string) (*APIKey, string, error) {
 	id, err := generateRandomString(8)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	key, err := generateRandomString(32)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	rawKey := "sk_" + key
 
 	apiKey := APIKey{
-		ID:        id,
-		Name:      name,
-		Key:       "sk_" + key,
-		CreatedAt: time.Now(),
-		Revoked:   false,
+		ID:         id,
+		Name:       name,
+		KeyHash:    hashAPIKey(rawKey),
+		KeyPreview: previewAPIKey(rawKey),
+		CreatedAt:  time.Now(),
+		Revoked:    false,
 	}
 
 	s.mu.Lock()
@@ -153,11 +176,11 @@ func (s *Store) CreateAPIKey(name string) (*APIKey, error) {
 	s.mu.Unlock()
 
 	if err := s.save(); err != nil {
-		return nil, fmt.Errorf("failed to save auth store: %w", err)
+		return nil, "", fmt.Errorf("failed to save auth store: %w", err)
 	}
 
 	log.Printf("API key created: %s (%s)", apiKey.Name, apiKey.ID)
-	return &apiKey, nil
+	return &apiKey, rawKey, nil
 }
 
 // RevokeAPIKey marks an API key as revoked by its ID.
@@ -230,7 +253,7 @@ func (s *Store) ValidateAPIKey(key string) bool {
 	defer s.mu.RUnlock()
 
 	for _, k := range s.data.APIKeys {
-		if !k.Revoked && k.Key == key {
+		if !k.Revoked && subtle.ConstantTimeCompare([]byte(k.KeyHash), []byte(hashAPIKey(key))) == 1 {
 			return true
 		}
 	}
@@ -244,9 +267,16 @@ func (s *Store) load() error {
 		return err
 	}
 
+	loaded := storeData{}
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return json.Unmarshal(data, &s.data)
+	s.data = loaded
+	s.mu.Unlock()
+
+	return nil
 }
 
 // save writes the store data to disk.
@@ -259,6 +289,42 @@ func (s *Store) save() error {
 	}
 
 	return os.WriteFile(s.filePath, data, 0600)
+}
+
+func (s *Store) cleanupSessions() {
+	ticker := time.NewTicker(sessionCleanupInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		now := time.Now()
+		s.mu.Lock()
+		for token, session := range s.sessions {
+			if now.After(session.Expiry) {
+				delete(s.sessions, token)
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+func hashAdminPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
+}
+
+func hashAPIKey(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:])
+}
+
+func previewAPIKey(key string) string {
+	if len(key) <= 12 {
+		return key
+	}
+	return key[:8] + "..." + key[len(key)-4:]
 }
 
 // generateRandomString returns a hex-encoded random string of the given byte length.

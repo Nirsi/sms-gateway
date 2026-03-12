@@ -2,12 +2,19 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"sms-gateway/internal/modem"
 	"sms-gateway/internal/queue"
 )
+
+const maxJSONBodyBytes = 64 << 10
+
+var phonePattern = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`)
 
 // Handler holds the HTTP handlers for the SMS gateway API.
 type Handler struct {
@@ -91,11 +98,21 @@ func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 // handleSendSMS enqueues an SMS job and returns immediately.
 func (h *Handler) handleSendSMS(w http.ResponseWriter, r *http.Request) {
 	var req sendSMSRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		log.Printf("POST /api/send — invalid request body: %v", err)
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body: " + err.Error()})
 		return
 	}
+	if decoder.More() {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "request body must contain a single JSON object"})
+		return
+	}
+
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.Message = strings.TrimSpace(req.Message)
 
 	if req.Phone == "" {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "phone number is required"})
@@ -105,15 +122,23 @@ func (h *Handler) handleSendSMS(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "message is required"})
 		return
 	}
+	if !phonePattern.MatchString(req.Phone) {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "phone number must be in E.164 format"})
+		return
+	}
+	if len(req.Message) > 1600 {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "message is too long"})
+		return
+	}
 
 	job, ok := h.queue.Enqueue(req.Phone, req.Message)
 	if !ok {
-		log.Printf("POST /api/send — queue full, rejecting request to %s", req.Phone)
+		log.Printf("POST /api/send — queue full, rejecting request to %s", redactPhone(req.Phone))
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "queue is full, try again later"})
 		return
 	}
 
-	log.Printf("POST /api/send — enqueued job %s to %s", job.ID, req.Phone)
+	log.Printf("POST /api/send — enqueued job %s to %s", job.ID, redactPhone(req.Phone))
 	writeJSON(w, http.StatusAccepted, sendSMSResponse{
 		ID:      job.ID,
 		Status:  job.Status,
@@ -136,4 +161,11 @@ func (h *Handler) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, job)
+}
+
+func redactPhone(phone string) string {
+	if len(phone) <= 4 {
+		return phone
+	}
+	return fmt.Sprintf("%s***%s", phone[:3], phone[len(phone)-2:])
 }

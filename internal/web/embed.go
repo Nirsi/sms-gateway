@@ -42,6 +42,9 @@ var funcMap = template.FuncMap{
 		}
 		return key[:8] + "..." + key[len(key)-4:]
 	},
+	"messageLength": func(message string) int {
+		return len(message)
+	},
 }
 
 // parseTemplates parses all embedded templates with the shared function map.

@@ -43,12 +43,13 @@ type Queue struct {
 	mu          sync.RWMutex
 	modem       modem.Modem
 	historySize int
+	retainText  bool
 }
 
 // New creates a new Queue and starts the background worker and cleanup goroutine.
 // bufferSize controls how many jobs can be waiting before Enqueue rejects new ones.
 // historySize controls how many completed jobs are kept in memory.
-func New(m modem.Modem, bufferSize, historySize int) *Queue {
+func New(m modem.Modem, bufferSize, historySize int, retainText bool) *Queue {
 	if historySize < 0 {
 		historySize = 0
 	}
@@ -58,6 +59,7 @@ func New(m modem.Modem, bufferSize, historySize int) *Queue {
 		store:       make(map[string]*Job),
 		modem:       m,
 		historySize: historySize,
+		retainText:  retainText,
 	}
 
 	go q.worker()
@@ -84,7 +86,7 @@ func (q *Queue) Enqueue(phone, message string) (*Job, bool) {
 
 	select {
 	case q.jobs <- job:
-		log.Printf("job %s queued — to: %s", job.ID, phone)
+		log.Printf("job %s queued — to: %s", job.ID, redactPhone(phone))
 		return job, true
 	default:
 		// Channel is full — remove from store and reject.
@@ -178,7 +180,7 @@ func (q *Queue) process(job *Job) {
 	job.UpdatedAt = time.Now()
 	q.mu.Unlock()
 
-	log.Printf("job %s sending — to: %s", job.ID, job.Phone)
+	log.Printf("job %s sending — to: %s", job.ID, redactPhone(job.Phone))
 
 	result, err := q.modem.SendSMS(job.Phone, job.Message)
 
@@ -195,6 +197,10 @@ func (q *Queue) process(job *Job) {
 	} else {
 		job.Status = StatusSent
 		log.Printf("job %s sent — ref: %s", job.ID, result.MessageReference)
+	}
+
+	if !q.retainText {
+		job.Message = "[redacted]"
 	}
 }
 
@@ -244,4 +250,11 @@ func generateID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+func redactPhone(phone string) string {
+	if len(phone) <= 4 {
+		return phone
+	}
+	return phone[:3] + "***" + phone[len(phone)-2:]
 }
