@@ -15,6 +15,11 @@ import (
 	"sms-gateway/internal/modem"
 	"sms-gateway/internal/queue"
 	"sms-gateway/internal/web"
+
+	// Register available modem drivers. Add new drivers by adding a blank
+	// import here.
+	_ "sms-gateway/internal/modem/drivers/generic"
+	_ "sms-gateway/internal/modem/drivers/simulator"
 )
 
 func main() {
@@ -32,17 +37,44 @@ func main() {
 	}
 
 	// Initialize modem.
-	var m modem.Modem
+	driverName := cfg.Driver
 	if cfg.Simulator {
-		log.Printf("  Mode         : SIMULATOR (no real modem)")
-		m = modem.NewSimulator()
-	} else {
-		log.Printf("  Serial port  : %s @ %d baud", cfg.PortName, cfg.BaudRate)
-		m = modem.New(cfg.PortName, cfg.BaudRate)
+		log.Printf("  -simulator is deprecated; use -driver=simulator")
+		if cfg.DriverSet && driverName != "simulator" {
+			log.Fatalf("conflicting flags: -simulator cannot be combined with -driver=%s", driverName)
+		}
+		driverName = "simulator"
 	}
 
+	log.Printf("  Modem driver : %s", driverName)
+	if driverName == "simulator" {
+		log.Printf("  Mode         : SIMULATOR (no real modem)")
+	} else {
+		log.Printf("  Serial port  : %s @ %d baud", cfg.PortName, cfg.BaudRate)
+	}
+
+	m, err := modem.Open(driverName, modem.Options{
+		Port:     cfg.PortName,
+		BaudRate: cfg.BaudRate,
+		Extra:    cfg.ModemOpts,
+	})
+	if err != nil {
+		log.Fatalf("failed to initialize modem: %v", err)
+	}
+
+	if err := openModem(m, 10*time.Second); err != nil {
+		log.Fatalf("failed to open modem: %v", err)
+	}
+	defer func() {
+		if err := m.Close(); err != nil {
+			log.Printf("modem close error: %v", err)
+		}
+	}()
+
+	isSimulator := driverName == "simulator"
+
 	// Initialize queue.
-	q := queue.New(m, cfg.QueueSize, cfg.HistorySize, cfg.Simulator)
+	q := queue.New(m, cfg.QueueSize, cfg.HistorySize, isSimulator)
 
 	// Set up HTTP mux.
 	mux := http.NewServeMux()
@@ -85,6 +117,12 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func openModem(m modem.Modem, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return m.Open(ctx)
 }
 
 func securityHeaders(next http.Handler) http.Handler {

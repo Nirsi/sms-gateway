@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"log"
@@ -182,7 +183,11 @@ func (q *Queue) process(job *Job) {
 
 	log.Printf("job %s sending — to: %s", job.ID, redactPhone(job.Phone))
 
-	result, err := q.modem.SendSMS(job.Phone, job.Message)
+	// Per-send context. We cap SMS send duration so a wedged modem can't
+	// stall the worker forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	result, err := q.modem.SendSMS(ctx, job.Phone, job.Message)
 
 	q.mu.Lock()
 	defer q.mu.Unlock()

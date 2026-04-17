@@ -185,7 +185,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	status, statusErr := s.modem.GetStatus()
+	status, statusErr := s.modem.GetStatus(r.Context())
 	queueJobs := s.queue.ListByStatus(queue.StatusQueued, queue.StatusSending)
 	historyJobs := s.queue.ListByStatus(queue.StatusSent, queue.StatusFailed)
 
@@ -219,7 +219,7 @@ func (s *Server) handleKeysPage(w http.ResponseWriter, r *http.Request) {
 // --- HTMX partial handlers ---
 
 func (s *Server) handlePartialStatus(w http.ResponseWriter, r *http.Request) {
-	status, statusErr := s.modem.GetStatus()
+	status, statusErr := s.modem.GetStatus(r.Context())
 	data := map[string]any{
 		"Status":    status,
 		"StatusErr": "",

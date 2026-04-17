@@ -75,7 +75,7 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 func (h *Handler) handleStatus(w http.ResponseWriter, r *http.Request) {
 	log.Println("GET /api/status — checking modem status")
 
-	status, err := h.modem.GetStatus()
+	status, err := h.modem.GetStatus(r.Context())
 	if err != nil {
 		log.Printf("modem status error: %v", err)
 		// Still return whatever partial status we gathered along with the error
