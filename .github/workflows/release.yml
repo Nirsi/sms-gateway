@@ -35,12 +35,45 @@ jobs:
           files: dist/sms-gateway.exe
 
       - name: Upload binary to VirusTotal
-        uses: crazy-max/ghaction-virustotal@v5
         continue-on-error: true
-        with:
-          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
-          files: |
-            dist/sms-gateway.exe
-          update_release_body: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          request_rate: 4
+        shell: pwsh
+        env:
+          VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if (-not $env:VIRUSTOTAL_API_KEY) {
+            Write-Host "VIRUSTOTAL_API_KEY is not configured; skipping VirusTotal upload."
+            exit 0
+          }
+
+          $file = "dist/sms-gateway.exe"
+          if (-not (Test-Path $file)) {
+            throw "VirusTotal upload file not found: $file"
+          }
+
+          $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
+          $fileUrl = "https://www.virustotal.com/gui/file/$hash"
+
+          curl.exe --fail --silent --show-error --request POST `
+            --url "https://www.virustotal.com/api/v3/files" `
+            --header "x-apikey: $env:VIRUSTOTAL_API_KEY" `
+            --form "file=@$file"
+
+          Write-Host "VirusTotal file URL: $fileUrl"
+
+          $release = gh release view $env:GITHUB_REF_NAME --json body | ConvertFrom-Json
+          $body = $release.body
+          $note = "VirusTotal analysis: $fileUrl"
+
+          if ($body -match [regex]::Escape($fileUrl)) {
+            Write-Host "VirusTotal link is already present in the release body."
+            exit 0
+          }
+
+          if ([string]::IsNullOrWhiteSpace($body)) {
+            $newBody = $note
+          } else {
+            $newBody = "$body`n`n$note"
+          }
+
+          gh release edit $env:GITHUB_REF_NAME --notes "$newBody"
