@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build Windows binary
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          go build -o dist/sms-gateway.exe .
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/sms-gateway.exe
+
+      - name: Upload binary to VirusTotal
+        uses: crazy-max/ghaction-virustotal@v5
+        continue-on-error: true
+        with:
+          vt_api_key: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          files: |
+            dist/sms-gateway.exe
+          update_release_body: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          request_rate: 4
