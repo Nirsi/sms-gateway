@@ -8,10 +8,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"strings"
 	"sync"
-	"time"
 
 	"sms-gateway/internal/modem"
 )
@@ -49,7 +47,7 @@ func (d *Driver) GetStatus(_ context.Context) (*modem.Status, error) {
 	}, nil
 }
 
-// SendSMS logs the message and returns success after a small random delay.
+// SendSMS logs the message and returns success immediately.
 func (d *Driver) SendSMS(ctx context.Context, phoneNumber, message string) (*modem.SendResult, error) {
 	if phoneNumber == "" {
 		return &modem.SendResult{}, fmt.Errorf("phone number is required")
@@ -58,12 +56,8 @@ func (d *Driver) SendSMS(ctx context.Context, phoneNumber, message string) (*mod
 		return &modem.SendResult{}, fmt.Errorf("message is required")
 	}
 
-	// Simulate modem latency, but respect context cancellation.
-	delay := time.Duration(500+rand.Intn(501)) * time.Millisecond
-	select {
-	case <-time.After(delay):
-	case <-ctx.Done():
-		return &modem.SendResult{}, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return &modem.SendResult{}, err
 	}
 
 	d.mu.Lock()
